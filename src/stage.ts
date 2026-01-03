@@ -1,13 +1,18 @@
-import { Layer } from "./layer";
+import { Scene } from "./scene";
+import { Event } from "./event";
+import { Vector2 } from "./vector";
+import type { Maybe } from "./types";
 
 export type Stage = {
   configureDebug: "print" | "paint" | boolean;
   configureW    : number;
   configureH    : number;
-  configureUpdatesPerSecond: number;
-  configureRendersPerSecond: number;
-  configureScaleIncrement ?: number;
-  configureImageSmoothing ?: ImageSmoothingQuality;
+  configureLogicalBackground: string;
+  configureVirtualBackground: string;
+  configureUpdatesPerSecond : number;
+  configureRendersPerSecond : number;
+  configureScaleIncrement  ?: number;
+  configureImageSmoothing  ?: ImageSmoothingQuality;
 
   logicalCanvasElement: HTMLCanvasElement
   virtualCanvasElement: OffscreenCanvas
@@ -15,7 +20,8 @@ export type Stage = {
   virtualCanvasContext: OffscreenCanvasRenderingContext2D
   virtualScale: number;
 
-  layers: Array<Layer>
+  scene  ?: Scene
+  events  : Event.Tree
 
   framesPerSecond : number
   updatesPerSecond: number
@@ -46,24 +52,32 @@ export type Stage = {
   __maximumMillisPerRenderAccumulator__: number
 }
 
+export namespace Stage {
+
+}
+
 export const Stage = {
   new(canvas: HTMLCanvasElement, o ?: {
     debug ?: "print" | "paint" | boolean;
     w   ?: number;
     h   ?: number;
+    lbg ?: string;
+    vbg ?: string;
     ups ?: number;
     rps ?: number;
 
     si ?: number;
     is ?: ImageSmoothingQuality;
   }) {
-    const configureDebug            = o?.debug ?? false;
-    const configureW                = o?.w     ?? 0;
-    const configureH                = o?.h     ?? 0;
-    const configureUpdatesPerSecond = o?.ups   ?? 0;
-    const configureRendersPerSecond = o?.rps   ?? 0;
-    const configureScaleIncrement   = o?.si
-    const configureImageSmoothing   = o?.is
+    const configureDebug             = o?.debug ?? false;
+    const configureW                 = o?.w     ?? 0;
+    const configureH                 = o?.h     ?? 0;
+    const configureLogicalBackground = o?.lbg   ?? "#000";
+    const configureVirtualBackground = o?.vbg   ?? "#fff";
+    const configureUpdatesPerSecond  = o?.ups   ?? 0;
+    const configureRendersPerSecond  = o?.rps   ?? 0;
+    const configureScaleIncrement    = o?.si
+    const configureImageSmoothing    = o?.is
     
     const logicalCanvasElement = canvas;
     const virtualCanvasElement = new OffscreenCanvas(
@@ -95,6 +109,8 @@ export const Stage = {
       configureDebug,
       configureW    ,
       configureH    ,
+      configureLogicalBackground,
+      configureVirtualBackground,
       configureUpdatesPerSecond,
       configureRendersPerSecond,
       configureScaleIncrement,
@@ -106,7 +122,7 @@ export const Stage = {
       virtualCanvasContext,
       virtualScale,
 
-      layers: [],
+      events: Event.Tree.new(),
 
       // metrics
       framesPerSecond       : 0,
@@ -139,6 +155,9 @@ export const Stage = {
 
     new ResizeObserver(() => resize(stage)).observe(canvas);
 
+    Stage.listen<Maybe<Scene>>(stage, "scene" , scene => onScene (stage, scene));
+    Stage.listen<Vector2     >(stage, "resize", size  => onResize(stage, size ));
+
     requestAnimationFrame(
       firstFrame => requestAnimationFrame(
         lastFrame => requestAnimationFrame(
@@ -154,26 +173,64 @@ export const Stage = {
     return stage;
   },
 
-  attach(stage: Stage, layer: Layer) {
-    if ( stage.layers.includes(layer))
-      throw new Error(`[Stage.attach]: Layer is already attached`);
-    stage.layers = [...stage.layers, layer];
-    if (layer.onAttach)
-      layer.onAttach(stage);
+  getLogicalSize(stage: Stage) {
+    return Vector2.new(
+      stage.logicalCanvasElement.width ,
+      stage.logicalCanvasElement.height
+    )
   },
 
-  detach(stage: Stage, layer: Layer) {
-    if (!stage.layers.includes(layer))
-      throw new Error(`[Stage.detach]: Layer is not attached`);
-    stage.layers = stage.layers.filter(l => l !== layer);
-    if (layer.onDetach)
-      layer.onDetach(stage);
+  getVirtualSize(stage: Stage) {
+    return Vector2.new(
+      stage.virtualCanvasElement.width ,
+      stage.virtualCanvasElement.height
+    )
   },
+
+  getVirtualScale(stage: Stage) {
+    return stage.virtualScale;
+  },
+
+  listen<T>(stage: Stage, kind: string, listener: Event.Listener<T>, o ?: { path ?: string, defer ?: boolean }) {
+    Event.Tree.listen(stage.events, kind, listener, o);
+  },
+
+  deafen<T>(stage: Stage, kind: string, listener: Event.Listener<T>, o ?: { path ?: string, defer ?: boolean }) {
+    Event.Tree.deafen(stage.events, kind, listener, o);
+  },
+
+  dispatch<T>(stage: Stage, kind: string, event: T, o ?: { path ?: string, defer ?: boolean }) {
+    Event.Tree.dispatch(stage.events, kind, event, o);
+  },
+
+  poll(stage: Stage) {
+    Event.Tree.poll(stage.events);
+  },
+
+  scene(stage: Stage, scene: Maybe<Scene>) {
+    Stage.dispatch(stage, "scene", scene);
+  }
 }
 
 function resize(stage: Stage) {
-  stage.logicalCanvasElement.width  = stage.logicalCanvasElement.getBoundingClientRect().width ;
-  stage.logicalCanvasElement.height = stage.logicalCanvasElement.getBoundingClientRect().height;
+  const size = Vector2.new(
+    stage.logicalCanvasElement.getBoundingClientRect().width ,
+    stage.logicalCanvasElement.getBoundingClientRect().height
+  )
+  Stage.dispatch(stage, "resize", size);
+}
+
+function onScene(stage: Stage, scene: Maybe<Scene>) {
+  if (stage.scene && stage.scene.onDetach)
+    stage.scene.onDetach(stage);
+  stage.scene = scene;
+  if (stage.scene && stage.scene.onAttach)
+    stage.scene.onAttach(stage);
+}
+
+function onResize(stage: Stage, [w, h]: Vector2) {
+  stage.logicalCanvasElement.width  = w;
+  stage.logicalCanvasElement.height = h;
 
   stage.virtualCanvasElement = new OffscreenCanvas(
     stage.configureW || stage.logicalCanvasElement.width,
@@ -201,18 +258,15 @@ function resize(stage: Stage) {
 }
 
 function update(stage: Stage, t: number, dt: number) {
-  for (const layer of stage.layers)
-    if (Layer.isUpdateable(layer))
-      layer.onUpdate({stage, t, dt});
+  Stage.poll(stage);
+  if (Scene.isUpdateable(stage.scene))
+    stage.scene.onUpdate({stage, t, dt});
 }
 
 function render(stage: Stage, t: number, dt: number) {
-  const lw = stage.logicalCanvasElement.width ;
-  const lh = stage.logicalCanvasElement.height;
-  const vw = stage.virtualCanvasElement.width ;
-  const vh = stage.virtualCanvasElement.height;
-  const vs = stage.virtualScale;
-
+  const [lw, lh] = Stage.getLogicalSize (stage);
+  const [vw, vh] = Stage.getVirtualSize (stage);
+  const vs       = Stage.getVirtualScale(stage);
 
   const f = stage.logicalCanvasContext;
   const g = stage.virtualCanvasContext;
@@ -220,15 +274,19 @@ function render(stage: Stage, t: number, dt: number) {
   f.resetTransform();
   g.resetTransform();
 
+  f.fillStyle = stage.configureLogicalBackground;
+  g.fillStyle = stage.configureVirtualBackground;
+  f.fillRect(0, 0, lw, lh);
+  g.fillRect(0, 0, vw, vh);
+
   f.translate(
     (lw - vw * vs) / 2,
     (lh - vh * vs) / 2
   )
   f.scale(vs, vs);
 
-  for (const layer of stage.layers)
-    if (Layer.isRenderable(layer))
-      layer.onRender({stage, t, dt, g});
+  if (Scene.isRenderable(stage.scene))
+    stage.scene.onRender({stage, t, dt, g});
 
   f.drawImage(stage.virtualCanvasElement, 0, 0);
 }
