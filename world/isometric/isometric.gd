@@ -4,7 +4,7 @@ extends Node2D
 
 const TILE_WIDTH : int = 64
 const TILE_DEPTH : int = 32
-const TILE_HEIGHT: int = 96
+const TILE_HEIGHT: int = 48
 
 @warning_ignore("integer_division")
 const TILE_HALF_WIDTH : int = TILE_WIDTH  / 2
