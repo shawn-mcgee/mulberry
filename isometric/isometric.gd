@@ -2,16 +2,16 @@
 class_name Isometric
 extends Node2D
 
-const TILE_WIDTH : int = 64
-const TILE_DEPTH : int = 32
-const TILE_HEIGHT: int = 48
+const VOLUME_WIDTH : int = 64
+const VOLUME_DEPTH : int = 32
+const VOLUME_HEIGHT: int = 48
 
 @warning_ignore("integer_division")
-const TILE_HALF_WIDTH : int = TILE_WIDTH  / 2
+const VOLUME_HALF_WIDTH : int = VOLUME_WIDTH  / 2
 @warning_ignore("integer_division")
-const TILE_HALF_DEPTH : int = TILE_DEPTH  / 2
+const VOLUME_HALF_DEPTH : int = VOLUME_DEPTH  / 2
 @warning_ignore("integer_division")
-const TILE_HALF_HEIGHT: int = TILE_HEIGHT / 2
+const VOLUME_HALF_HEIGHT: int = VOLUME_HEIGHT / 2
 
 var _world_position: Vector2 = Vector2.ZERO
 var _pixel_position: Vector2 = Vector2.ZERO
@@ -48,14 +48,15 @@ func _update_position():
 
 static func world_to_pixel(where: Vector2) -> Vector2:
   return Vector2(
-    (where.x - where.y) * TILE_HALF_WIDTH,
-    (where.x + where.y) * TILE_HALF_DEPTH
+    (where.x - where.y) * VOLUME_HALF_WIDTH,
+    (where.x + where.y) * VOLUME_HALF_DEPTH
   )
 
 static func pixel_to_world(where: Vector2) -> Vector2:
-  var x = where.x / TILE_HALF_WIDTH
-  var y = where.y / TILE_HALF_DEPTH
+  var x = where.x / VOLUME_HALF_WIDTH
+  var y = where.y / VOLUME_HALF_DEPTH
   return Vector2(
     (y + x),
     (y - x)
   )
+
